@@ -83,18 +83,20 @@
     },
     "ADMIN_CONTACT": {
       "description": "type admin contact link",
-      "value": "https://t.me/kingofpatal",
+      "value": "@ImUnknownBro",
       "required": true
     },
     "JOIN_LINK": {
       "description": "type join channel link which comes on /start",
-      "value": "https://t.me/team_spy_pro",
+      "value": "https://t.me/pepeTaskHub",
       "required": true
     }
   },
   "buildpacks": [
     { "url": "heroku/python" },
-    { "url": "https://github.com/heroku/heroku-buildpack-activestorage-preview" }
+    {
+      "url": "https://github.com/heroku/heroku-buildpack-activestorage-preview"
+    }
   ],
   "stack": "container"
 }

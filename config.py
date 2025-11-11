@@ -28,7 +28,7 @@ DB_NAME      = os.getenv("DB_NAME", "telegram_downloader")
 
 # ─── OWNER / CONTROL SETTINGS ───────────────────────────────────────────────────
 OWNER_ID     = list(map(int, os.getenv("OWNER_ID", "").split()))  # space-separated list
-STRING       = os.getenv("STRING", None)  # optional session string
+STRING       = os.getenv("STRING", "sdfsjwkerwjhejhjsdfhjwhejr")  # optional session string
 LOG_GROUP    = int(os.getenv("LOG_GROUP", "-1001234456"))
 FORCE_SUB    = int(os.getenv("FORCE_SUB", "-10012345567"))
 
