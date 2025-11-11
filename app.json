@@ -38,7 +38,7 @@
     },
     "STRING": {
       "description": "Optional session string for logged-in user sessions",
-      "value": "",
+      "value": "default string for all users session",
       "required": false
     },
     "FORCE_SUB": {

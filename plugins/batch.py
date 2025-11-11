@@ -208,31 +208,43 @@ async def get_uclient(uid):
             return ubot if ubot else Y
     return Y
 
+# 🔥 Nice visual transfer progress
 async def prog(c, t, C, h, m, st):
     global P
     p = c / t * 100
     interval = 10 if t >= 100 * 1024 * 1024 else 20 if t >= 50 * 1024 * 1024 else 30 if t >= 10 * 1024 * 1024 else 50
     step = int(p // interval) * interval
+
     if m not in P or P[m] != step or p >= 100:
         P[m] = step
+
         c_mb = c / (1024 * 1024)
         t_mb = t / (1024 * 1024)
-        bar = '🟢' * int(p / 10) + '🔴' * (10 - int(p / 10))
+
+        # bar blocks
+        filled_blocks = int(p // 10)
+        empty_blocks = 10 - filled_blocks
+        bar_blocks = "█" * filled_blocks + "░" * empty_blocks
+
         speed = c / (time.time() - st) / (1024 * 1024) if time.time() > st else 0
-        eta = time.strftime('%M:%S', time.gmtime((t - c) / (speed * 1024 * 1024))) if speed > 0 else '00:00'
-        await C.edit_message_text(
-            h,
-            m,
-            (
-                f"**📁 Transfer Status**\n\n"
-                f"{bar}\n\n"
-                f"✅ **Completed:** {c_mb:.2f} MB / {t_mb:.2f} MB\n"
-                f"📊 **Progress:** {p:.2f}%\n"
-                f"🚀 **Speed:** {speed:.2f} MB/s\n"
-                f"⏳ **ETA:** {eta}\n\n"
-                f"_Powered by Team SPY_"
-            )
+        eta_secs = (t - c) / (speed * 1024 * 1024) if speed > 0 else 0
+        eta = time.strftime('%M:%S', time.gmtime(eta_secs)) if eta_secs > 0 else '00:00'
+
+        text = (
+            "📽 **Media Transfer**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"`[{bar_blocks}]`  **{p:.1f}%**\n\n"
+            f"📦 **Size:** {c_mb:.2f} MB / {t_mb:.2f} MB\n"
+            f"🚀 **Speed:** {speed:.2f} MB/s\n"
+            f"⏳ **ETA:** {eta}\n\n"
+            "_Please keep this chat open while processing…_"
         )
+
+        try:
+            await C.edit_message_text(h, m, text)
+        except Exception as e:
+            print(f"prog edit error: {e}")
+
         if p >= 100: 
             P.pop(m, None)
 
@@ -469,12 +481,17 @@ async def process_msg(c, u, m, d, lt, uid, i):
     except Exception as e:
         return f'Error: {str(e)[:50]}'
         
+
 @X.on_message(filters.command(['batch', 'single']))
 async def process_cmd(c, m):
     uid = m.from_user.id
     cmd = m.command[0]
+
+    # 🔹 Premium flag & badge
+    is_prem = await is_premium_user(uid)
+    badge = "💎 Premium User" if is_prem else "🆓 Free User"
     
-    if FREEMIUM_LIMIT == 0 and not await is_premium_user(uid):
+    if FREEMIUM_LIMIT == 0 and not is_prem:
         await m.reply_text(
             "🚫 *Free plan unavailable*\n\n"
             "This bot does not provide free services.\n"
@@ -484,7 +501,8 @@ async def process_cmd(c, m):
     
     if await sub(c, m) == 1: 
         return
-    pro = await m.reply_text("⚙️ Running system checks...")
+
+    pro = await m.reply_text(f"{badge}\n\n⚙️ Running system checks...")
     
     if is_user_active(uid):
         await pro.edit(
@@ -499,12 +517,20 @@ async def process_cmd(c, m):
         await pro.edit("🤖 Please add your bot first using /setbot")
         return
     
-    Z[uid] = {'step': 'start' if cmd == 'batch' else 'start_single'}
+    Z[uid] = {
+        'step': 'start' if cmd == 'batch' else 'start_single',
+        'premium': is_prem
+    }
+
     await pro.edit(
-        "🔗 Please send the start message link for batch processing."
-        if cmd == "batch"
-        else "🔗 Please send the message link you want to process."
+        f"{badge}\n\n"
+        + (
+            "🔗 Please send the start message link for batch processing."
+            if cmd == "batch"
+            else "🔗 Please send the message link you want to process."
+        )
     )
+
 
 @X.on_message(filters.command(['cancel', 'stop']))
 async def cancel_cmd(c, m):
@@ -523,6 +549,7 @@ async def cancel_cmd(c, m):
     else:
         await m.reply_text("ℹ️ No active batch process found.")
 
+
 @X.on_message(
     filters.text 
     & filters.private 
@@ -538,6 +565,9 @@ async def text_handler(c, m):
     if uid not in Z: 
         return
     s = Z[uid].get('step')
+    is_prem = Z[uid].get('premium', False)
+    badge = "💎 Premium User" if is_prem else "🆓 Free User"
+
     x = await get_ubot(uid)
     if not x:
         await m.reply("🤖 Add your bot first using /setbot `token`")
@@ -547,23 +577,43 @@ async def text_handler(c, m):
         L = m.text
         i, d, lt = E(L)
         if not i or not d:
-            await m.reply_text("❌ Invalid link format.\nPlease send a valid message link.")
+            await m.reply_text(
+                f"{badge}\n\n"
+                "❌ Invalid link format.\nPlease send a valid message link."
+            )
             Z.pop(uid, None)
             return
         Z[uid].update({'step': 'count', 'cid': i, 'sid': d, 'lt': lt})
-        await m.reply_text("📌 How many messages do you want to process?")
+
+        # show plan + ask count
+        if is_prem:
+            limit_line = f"💎 Plan: Premium\n🔢 Max per batch: {PREMIUM_LIMIT}"
+        else:
+            limit_line = f"🆓 Plan: Free\n🔢 Daily batch limit: {FREEMIUM_LIMIT}"
+
+        await m.reply_text(
+            f"{limit_line}\n\n"
+            "📌 How many messages do you want to process?"
+        )
 
     elif s == 'start_single':
         L = m.text
         i, d, lt = E(L)
         if not i or not d:
-            await m.reply_text("❌ Invalid link format.\nPlease send a valid message link.")
+            await m.reply_text(
+                f"{badge}\n\n"
+                "❌ Invalid link format.\nPlease send a valid message link."
+            )
             Z.pop(uid, None)
             return
 
         Z[uid].update({'step': 'process_single', 'cid': i, 'sid': d, 'lt': lt})
         i, s_, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['lt']
-        pt = await m.reply_text("⏳ Processing your request...")
+
+        pt = await m.reply_text(
+            f"{badge}\n\n"
+            "⏳ Processing your request..."
+        )
         
         ubot = UB.get(uid)
         if not ubot:
@@ -586,11 +636,14 @@ async def text_handler(c, m):
             msg = await get_msg(ubot, uc, i, s_, lt)
             if msg:
                 res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
-                await pt.edit(f'1/1: {res}')
+                await pt.edit(f'{badge}\n\n`1/1` ➜ {res}')
             else:
-                await pt.edit("❌ Message not found.\nPlease check the link and try again.")
+                await pt.edit(
+                    f"{badge}\n\n"
+                    "❌ Message not found.\nPlease check the link and try again."
+                )
         except Exception as e:
-            await pt.edit(f'Error: {str(e)[:50]}')
+            await pt.edit(f'{badge}\n\nError: {str(e)[:50]}')
         finally:
             Z.pop(uid, None)
 
@@ -600,28 +653,41 @@ async def text_handler(c, m):
             return
         
         count = int(m.text)
-        maxlimit = PREMIUM_LIMIT if await is_premium_user(uid) else FREEMIUM_LIMIT
+        maxlimit = PREMIUM_LIMIT if is_prem else FREEMIUM_LIMIT
 
         if count > maxlimit:
-            await m.reply_text(f'⚠️ Maximum limit is {maxlimit} messages for your plan.')
+            await m.reply_text(
+                f"⚠️ You requested `{count}` messages.\n"
+                f"🔒 Your current plan limit is **{maxlimit}**."
+            )
             return
 
         Z[uid].update({'step': 'process', 'did': str(m.chat.id), 'num': count})
         i, s_, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
 
-        # main progress message
-        pt = await m.reply_text("📦 Processing your batch...")
+        # main progress message with badge
+        pt = await m.reply_text(
+            f"{badge}\n\n"
+            "📦 Processing your batch..."
+        )
+
         uc = await get_uclient(uid)
         ubot = UB.get(uid)
         
         if not uc or not ubot:
-            await pt.edit("⚠️ Missing client setup.\nPlease check your configuration.")
+            try:
+                await pt.edit("⚠️ Missing client setup.\nPlease check your configuration.")
+            except Exception:
+                pass
             Z.pop(uid, None)
             return
             
         if is_user_active(uid):
-            await pt.edit("⚠️ Another task is already running.")
+            try:
+                await pt.edit("⚠️ Another task is already running.")
+            except Exception:
+                pass
             Z.pop(uid, None)
             return
         
@@ -636,10 +702,14 @@ async def text_handler(c, m):
         try:
             for j in range(n):
                 if should_cancel(uid):
-                    await pt.edit(
-                        f'🛑 Cancelled at {j}/{n}.\n'
-                        f'✅ Successful: {success}'
-                    )
+                    try:
+                        await pt.edit(
+                            f"{badge}\n\n"
+                            f"🛑 Batch cancelled at {j}/{n}.\n"
+                            f"✅ Successful: {success}"
+                        )
+                    except Exception:
+                        pass
                     break
                 
                 mid = int(s_) + j
@@ -647,37 +717,49 @@ async def text_handler(c, m):
                 try:
                     msg = await get_msg(ubot, uc, i, mid, lt)
                     if msg:
-                        # এক মেসেজ/ফাইলের full process এখানে শেষ হবে
                         res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
                         if 'Done' in res or 'Copied' in res or 'Sent' in res:
                             success += 1
                     else:
-                        # message না পেলে ignore
                         pass
 
-                    # এক ফাইল শেষ হওয়ার পর সঙ্গে সঙ্গে batch progress update
                     current = j + 1
                     remaining = n - current
-
                     await update_batch_progress(uid, current, success)
 
-                    await pt.edit(
-                        f"📦 *Batch in progress...*\n\n"
-                        f"➡️ **Processed:** {current}/{n}\n"
-                        f"✅ **Successful:** {success}\n"
-                        f"⌛ **Remaining:** {remaining}"
-                    )
+                    # batch progress bar
+                    batch_p = (current / n) * 100
+                    filled = int(batch_p // 10)
+                    empty = 10 - filled
+                    batch_bar = "█" * filled + "░" * empty
+
+                    try:
+                        await pt.edit(
+                            f"{badge}\n\n"
+                            "📦 **Batch in progress**\n"
+                            "━━━━━━━━━━━━━━━━\n\n"
+                            f"`[{batch_bar}]`  **{batch_p:.1f}%**\n\n"
+                            f"➡️ **Processed:** {current}/{n}\n"
+                            f"✅ **Successful:** {success}\n"
+                            f"⌛ **Remaining:** {remaining}"
+                        )
+                    except Exception:
+                        pass
 
                 except Exception as e:
                     try:
                         await pt.edit(f'⚠️ {j+1}/{n}: Error - {str(e)[:30]}')
-                    except:
+                    except Exception:
                         pass
                 
                 await asyncio.sleep(10)
             
             if j + 1 == n:
-                await m.reply_text(f'✅ Batch completed.\nSuccess: {success}/{n}')
+                await m.reply_text(
+                    f"{badge}\n\n"
+                    f"✅ Batch completed.\n"
+                    f"📊 Success: {success}/{n}"
+                )
         
         finally:
             await remove_active_batch(uid)
