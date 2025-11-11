@@ -5,7 +5,7 @@
 import os, re, time, asyncio, json, asyncio 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.errors import UserNotParticipant
+from pyrogram.errors import UserNotParticipant, FloodWait
 from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT
 from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E
@@ -172,41 +172,96 @@ async def get_msg(c, u, i, d, lt):
 
 
 async def get_ubot(uid):
+    """
+    User-er set kora bot token diye ekta bot client start kore.
+    FloodWait hole crash korbe na, just None return korbe.
+    """
     bt = await get_user_data_key(uid, "bot_token", None)
-    if not bt: 
-        return None
-    if uid in UB: 
-        return UB.get(uid)
-    try:
-        bot = Client(f"user_{uid}", bot_token=bt, api_id=API_ID, api_hash=API_HASH)
-        await bot.start()
-        UB[uid] = bot
-        return bot
-    except Exception as e:
-        print(f"Error starting bot for user {uid}: {e}")
+    if not bt:
         return None
 
+    # cache-a already thakle direct oita use
+    if uid in UB:
+        return UB.get(uid)
+
+    try:
+        bot = Client(
+            f"user_{uid}",
+            bot_token=bt,
+            api_id=API_ID,
+            api_hash=API_HASH
+        )
+
+        try:
+            await bot.start()
+        except FloodWait as e:
+            # Telegram bolse: beshi bar authorize korte geso, e.value second wait korte hobe
+            wait_for = getattr(e, "value", None) or getattr(e, "x", None) or 0
+            print(f"[get_ubot] FloodWait for user {uid}: wait {wait_for} seconds (ImportBotAuthorizationRequest)")
+            # ekhane chaile user ke message o dite paro je "Try again later"
+            return None
+
+        UB[uid] = bot
+        print(f"[get_ubot] Bot client started for user {uid}")
+        return bot
+
+    except Exception as e:
+        print(f"[get_ubot] Error starting bot for user {uid}: {e}")
+        return None
+
+
 async def get_uclient(uid):
+    """
+    User session_string theke ekta user client banay.
+    FloodWait/other error hole, jodi possible hoy tahole fallback hishebe:
+      - user-er bot client (ubot)
+      - global Y client
+    return kore.
+    """
     ud = await get_user_data(uid)
     ubot = UB.get(uid)
     cl = UC.get(uid)
-    if cl: 
+
+    # cache thakle direct return
+    if cl:
         return cl
-    if not ud: 
-        return ubot if ubot else None
-    xxx = ud.get('session_string')
+
+    # user data na thakle, atleast ubot / Y pathiye dewa jay
+    if not ud:
+        return ubot if ubot else Y
+
+    xxx = ud.get("session_string")
     if xxx:
         try:
             ss = dcs(xxx)
-            gg = Client(f'{uid}_client', api_id=API_ID, api_hash=API_HASH, device_model="v3saver", session_string=ss)
-            await gg.start()
+            gg = Client(
+                f"{uid}_client",
+                api_id=API_ID,
+                api_hash=API_HASH,
+                device_model="v3saver",
+                session_string=ss
+            )
+            try:
+                await gg.start()
+            except FloodWait as e:
+                wait_for = getattr(e, "value", None) or getattr(e, "x", None) or 0
+                print(f"[get_uclient] FloodWait for user client {uid}: wait {wait_for} seconds")
+                # FloodWait hole new client use korte parbo na, tai fallback
+                return ubot if ubot else Y
+
             await upd_dlg(gg)
             UC[uid] = gg
+            print(f"[get_uclient] User client started for user {uid}")
             return gg
+
         except Exception as e:
-            print(f'User client error: {e}')
+            print(f"[get_uclient] User client error for {uid}: {e}")
+            # jodi userclient fail kore, ubot / Y fallback
             return ubot if ubot else Y
-    return Y
+
+    # session_string e nai, fallback
+    return ubot if ubot else Y
+
 
 # 🔥 Nice visual transfer progress
 async def prog(c, t, C, h, m, st):
