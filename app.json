@@ -38,7 +38,7 @@
     },
     "STRING": {
       "description": "Optional session string for logged-in user sessions",
-      "value": "default string for all users session",
+      "value": "",
       "required": false
     },
     "FORCE_SUB": {
@@ -53,7 +53,7 @@
     },
     "MASTER_KEY": {
       "description": "Master key used for session encryption",
-      "value": "gK8HzLfT9QpViJcYeB5wRa3DmN7P2xUq",
+      "value": "",
       "required": false
     },
     "IV_KEY": {
@@ -83,7 +83,7 @@
     },
     "ADMIN_CONTACT": {
       "description": "type admin contact link",
-      "value": "@ImUnknownBro",
+      "value": "https://t.me/ImUnknownBro",
       "required": true
     },
     "JOIN_LINK": {
